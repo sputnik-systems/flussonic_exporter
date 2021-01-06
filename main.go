@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"text/tabwriter"
 
 	log "github.com/sirupsen/logrus"
 
@@ -37,6 +38,7 @@ type Flags struct {
 	Addr    *string
 	Backend *string
 	Config  *string
+	Version *bool
 }
 
 type Metrics struct {
@@ -149,7 +151,11 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	meta.GetServerInfo()
+	err = meta.GetServerInfo()
+	if err != nil {
+		log.Error(err)
+	}
+
 	mediaServerUptime.Set(float64(meta.Metrics.Server.Uptime))
 	mediaServerTotalClients.Set(float64(meta.Metrics.Server.TotalClients))
 	mediaServerTotalStreams.Set(float64(meta.Metrics.Server.TotalStreams))
@@ -194,14 +200,15 @@ func (m *Meta) GetAuth() error {
 	}
 	defer c.Close()
 
-	r := regexp.MustCompile(`(?:^view_auth\s|\s|;$)`)
+	regexpAuth := regexp.MustCompile(`(?:^view_auth\s|\s|;$)`)
+	regexpAuthLine := regexp.MustCompile(`^view_auth`)
 
 	scanner := bufio.NewScanner(c)
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if match, _ := regexp.MatchString(`^view_auth`, line); match {
-			auth := r.Split(line, -1)
+		if regexpAuthLine.MatchString(line) {
+			auth := regexpAuth.Split(line, -1)
 			m.Config.BasicAuth.Username, m.Config.BasicAuth.Password = auth[1], auth[2]
 		}
 	}
@@ -239,7 +246,11 @@ func (m *Meta) makeRequest(path string) ([]byte, error) {
 	return body, nil
 }
 
-var meta *Meta
+var (
+	meta     *Meta
+	version  string
+	commitID string
+)
 
 func init() {
 	meta = &Meta{}
@@ -247,7 +258,18 @@ func init() {
 	meta.Flags.Addr = flag.String("listen-address", ":9708", "The address to listen on for HTTP requests.")
 	meta.Flags.Backend = flag.String("backend-address", "http://localhost:80", "Flussonic media server api address.")
 	meta.Flags.Config = flag.String("config-path", "/etc/flussonic/flussonic.conf", "Flussonic media server config path.")
+	meta.Flags.Version = flag.Bool("version", false, "Show exporter version.")
 	flag.Parse()
+
+	if *meta.Flags.Version {
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		if version != "" {
+			fmt.Fprintf(w, "version:\t%s\n", version)
+		}
+		fmt.Fprintf(w, "git commit:\t%s\n", commitID)
+		w.Flush()
+		os.Exit(0)
+	}
 
 	meta.Config.Client = &http.Client{}
 

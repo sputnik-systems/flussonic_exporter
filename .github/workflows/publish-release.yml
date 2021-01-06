@@ -1,0 +1,60 @@
+name: publish release
+
+on:
+  push:
+    tags:
+      - v*
+    
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.15
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+    
+    - name: Get tag info
+      id: tag_info
+      run: |
+        echo ::set-output name=GITHUB_TAG::${GITHUB_REF/refs\/tags\//}
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+
+    - name: Build
+      env:
+        GITHUB_TAG: ${{ steps.tag_info.outputs.GITHUB_TAG }}
+      run: |
+        mkdir release
+        go build -v \
+                 -o release/flussonic_exporter-${GITHUB_TAG}-linux-amd64 \
+                 -ldflags "-X main.version=${GITHUB_TAG} -X main.commitID=${GITHUB_SHA:0:7}" .
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: flussonic_exporter ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/flussonic_exporter-${{ steps.tag_info.outputs.GITHUB_TAG }}-linux-amd64
+        asset_name: flussonic_exporter-${{ steps.tag_info.outputs.GITHUB_TAG }}-linux-amd64
+        asset_content_type: application/octet-stream
