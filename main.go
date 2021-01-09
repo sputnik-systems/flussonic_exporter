@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -35,10 +36,11 @@ type BasicAuth struct {
 }
 
 type Flags struct {
-	Addr    *string
-	Backend *string
-	Config  *string
-	Version *bool
+	Addr               *string
+	Backend            *string
+	InsecureSkipVerify *bool
+	Config             *string
+	Version            *bool
 }
 
 type Metrics struct {
@@ -257,6 +259,7 @@ func init() {
 
 	meta.Flags.Addr = flag.String("listen-address", ":9708", "The address to listen on for HTTP requests.")
 	meta.Flags.Backend = flag.String("backend-address", "http://localhost:80", "Flussonic media server api address.")
+	meta.Flags.InsecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Skip verify cert for Flussonic media server.")
 	meta.Flags.Config = flag.String("config-path", "/etc/flussonic/flussonic.conf", "Flussonic media server config path.")
 	meta.Flags.Version = flag.Bool("version", false, "Show exporter version.")
 	flag.Parse()
@@ -271,7 +274,13 @@ func init() {
 		os.Exit(0)
 	}
 
-	meta.Config.Client = &http.Client{}
+	meta.Config.Client = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: *meta.Flags.InsecureSkipVerify,
+			},
+		},
+	}
 
 	err := meta.GetAuth()
 	if err != nil {
