@@ -68,7 +68,8 @@ type FlussonicMediaValueStats struct {
 }
 
 type FlussonicMediaValueOptions struct {
-	Dvr FlussonicMediaValueOptionsDvr
+	Dvr   FlussonicMediaValueOptionsDvr
+	Title string `json:title`
 }
 
 type FlussonicMediaValueOptionsDvr struct {
@@ -88,7 +89,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 			Name: "flussonic_media_stream_status",
 			Help: "flussonic streams status.",
 		},
-		[]string{"name", "dvr_limit"},
+		[]string{"name", "title", "dvr_limit"},
 	)
 	// mediaServerStatus := prometheus.NewGauge(
 	// 	prometheus.GaugeOpts{
@@ -142,6 +143,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		if value.Entry == "stream" {
 			s := streamStatus.With(prometheus.Labels{
 				"name":      value.Value.Name,
+				"title":     value.Value.Options.Title,
 				"dvr_limit": strconv.FormatUint(value.Value.Options.Dvr.DvrLimit, 10),
 			})
 
