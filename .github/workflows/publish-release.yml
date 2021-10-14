@@ -34,9 +34,10 @@ jobs:
         GITHUB_TAG: ${{ steps.tag_info.outputs.GITHUB_TAG }}
       run: |
         mkdir release
-        go build -v \
-                 -o release/flussonic_exporter-${GITHUB_TAG}-linux-amd64 \
-                 -ldflags "-X main.version=${GITHUB_TAG} -X main.commitID=${GITHUB_SHA:0:7}" .
+        go build \
+          -o release/flussonic_exporter-${GITHUB_TAG}-linux-amd64 \
+          -ldflags "-X main.version=${GITHUB_TAG} -X main.commitID=${GITHUB_SHA:0:7}" \
+          -v cmd/flussonic_exporter/main.go
 
     - name: Create Release
       id: create_release

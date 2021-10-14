@@ -36,44 +36,37 @@ type BasicAuth struct {
 }
 
 type Flags struct {
-	Addr               *string
-	Backend            *string
-	InsecureSkipVerify *bool
-	Config             *string
-	Version            *bool
+	Addr                *string
+	Backend             *string
+	InsecureSkipVerify  *bool
+	Config              *string
+	Version             *bool
+	StreamsRequestLimit *uint64
 }
 
 type Metrics struct {
-	Media  FlussonicMedia
-	Server FlussonicServer
+	FlussonicStreams
+	FlussonicServer
 }
 
-type FlussonicMedia []FlussonicMediaItem
-
-type FlussonicMediaItem struct {
-	Entry string
-	Value FlussonicMediaValue
+type FlussonicStreams struct {
+	Streams []FlussonicStream
 }
 
-type FlussonicMediaValue struct {
-	Name    string
-	Stats   FlussonicMediaValueStats
-	Options FlussonicMediaValueOptions
+type FlussonicStream struct {
+	Name, Title string
+	Dvr         FlussonicStreamDvr
+	Stats       FlussonicStreamStats
 }
 
-type FlussonicMediaValueStats struct {
+type FlussonicStreamStats struct {
 	AgentStatus string
 	Alive       bool
 	RetryCount  uint64
 }
 
-type FlussonicMediaValueOptions struct {
-	Dvr   FlussonicMediaValueOptionsDvr
-	Title string `json:title`
-}
-
-type FlussonicMediaValueOptionsDvr struct {
-	DvrLimit uint64 `json:"dvr_limit"`
+type FlussonicStreamDvr struct {
+	Expiration uint64
 }
 
 type FlussonicServer struct {
@@ -86,18 +79,11 @@ type FlussonicServer struct {
 func probeHandler(w http.ResponseWriter, r *http.Request) {
 	streamStatus := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "flussonic_media_stream_status",
+			Name: "flussonic_stream_status",
 			Help: "flussonic streams status.",
 		},
-		[]string{"name", "title", "dvr_limit"},
+		[]string{"name", "title", "dvr_expiration"},
 	)
-	// mediaServerStatus := prometheus.NewGauge(
-	// 	prometheus.GaugeOpts{
-	// 		Name: "flussonic_server_status",
-	// 		Help: "This metric mirror flussonic stream status.",
-	// 	},
-	// 	[]string{"name", "dvr_limit"},
-	// )
 	mediaServerUptime := prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "flussonic_server_uptime",
@@ -125,33 +111,27 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(streamStatus)
-	// registry.MustRegister(mediaServerStatus)
 	registry.MustRegister(mediaServerUptime)
 	registry.MustRegister(mediaServerTotalClients)
 	registry.MustRegister(mediaServerTotalStreams)
 	registry.MustRegister(mediaServerOnlineStreams)
 
-	meta.Metrics.Media = FlussonicMedia{}
-	meta.Metrics.Server = FlussonicServer{}
-
-	err := meta.GetMediaInfo()
+	err := meta.GetStreamsInfo()
 	if err != nil {
 		log.Error(err)
 	}
 
-	for _, value := range meta.Metrics.Media {
-		if value.Entry == "stream" {
-			s := streamStatus.With(prometheus.Labels{
-				"name":      value.Value.Name,
-				"title":     value.Value.Options.Title,
-				"dvr_limit": strconv.FormatUint(value.Value.Options.Dvr.DvrLimit, 10),
-			})
+	for _, value := range meta.Metrics.FlussonicStreams.Streams {
+		s := streamStatus.With(prometheus.Labels{
+			"name":           value.Name,
+			"title":          value.Title,
+			"dvr_expiration": strconv.FormatUint(value.Dvr.Expiration, 10),
+		})
 
-			if value.Value.Stats.Alive {
-				s.Set(1)
-			} else {
-				s.Set(0)
-			}
+		if value.Stats.Alive {
+			s.Set(1)
+		} else {
+			s.Set(0)
 		}
 	}
 
@@ -160,36 +140,82 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 	}
 
-	mediaServerUptime.Set(float64(meta.Metrics.Server.Uptime))
-	mediaServerTotalClients.Set(float64(meta.Metrics.Server.TotalClients))
-	mediaServerTotalStreams.Set(float64(meta.Metrics.Server.TotalStreams))
-	mediaServerOnlineStreams.Set(float64(meta.Metrics.Server.OnlineStreams))
+	mediaServerUptime.Set(float64(meta.Metrics.FlussonicServer.Uptime))
+	mediaServerTotalClients.Set(float64(meta.Metrics.FlussonicServer.TotalClients))
+	mediaServerTotalStreams.Set(float64(meta.Metrics.FlussonicServer.TotalStreams))
+	mediaServerOnlineStreams.Set(float64(meta.Metrics.FlussonicServer.OnlineStreams))
 
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
 }
 
-func (m *Meta) GetMediaInfo() error {
-	body, err := m.makeRequest("media")
+func (m *Meta) GetStreamsInfo() error {
+	var body []byte
+
+	req, _ := http.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("%s/flussonic/api/v3/streams", *m.Flags.Backend),
+		nil,
+	)
+
+	req.SetBasicAuth(
+		m.Config.BasicAuth.Username,
+		m.Config.BasicAuth.Password,
+	)
+
+	q := req.URL.Query()
+	q.Add("limit", strconv.FormatUint(*m.Flags.StreamsRequestLimit, 10))
+	req.URL.RawQuery = q.Encode()
+
+	log.Debug("getting /flussonic/api/v3/streams info")
+
+	resp, err := m.Config.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("api/media: %s", err)
+		return fmt.Errorf("get error: %s", err)
+	}
+	defer resp.Body.Close()
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("response body reading error: %s", err)
 	}
 
-	err = json.Unmarshal(body, &m.Metrics.Media)
+	err = json.Unmarshal(body, &m.Metrics.FlussonicStreams)
 	if err != nil {
-		return fmt.Errorf("api/media: response body unmarshaling error: %s", err)
+		return fmt.Errorf("flussonic/api/v3/streams: response body unmarshaling error: %s", err)
 	}
 
 	return nil
 }
 
 func (m *Meta) GetServerInfo() error {
-	body, err := m.makeRequest("server")
+	var body []byte
+
+	req, _ := http.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("%s/flussonic/api/server", *m.Flags.Backend),
+		nil,
+	)
+
+	req.SetBasicAuth(
+		m.Config.BasicAuth.Username,
+		m.Config.BasicAuth.Password,
+	)
+
+	log.Debug("getting /flussonic/api/server info")
+
+	resp, err := m.Config.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("api/server: %s", err)
+		return fmt.Errorf("get error: %s", err)
+	}
+	defer resp.Body.Close()
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("response body reading error: %s", err)
 	}
 
-	err = json.Unmarshal(body, &m.Metrics.Server)
+	err = json.Unmarshal(body, &m.Metrics.FlussonicServer)
 	if err != nil {
 		return fmt.Errorf("api/server: response body unmarshaling error: %s", err)
 	}
@@ -204,8 +230,8 @@ func (m *Meta) GetAuth() error {
 	}
 	defer c.Close()
 
-	regexpAuth := regexp.MustCompile(`(?:^view_auth\s|\s|;$)`)
-	regexpAuthLine := regexp.MustCompile(`^view_auth`)
+	regexpAuth := regexp.MustCompile(`(?:^edit_auth\s|\s|;$)`)
+	regexpAuthLine := regexp.MustCompile(`^edit_auth`)
 
 	scanner := bufio.NewScanner(c)
 	for scanner.Scan() {
@@ -218,36 +244,6 @@ func (m *Meta) GetAuth() error {
 	}
 
 	return nil
-}
-
-func (m *Meta) makeRequest(path string) ([]byte, error) {
-	var body []byte
-
-	req, _ := http.NewRequest(
-		http.MethodGet,
-		fmt.Sprintf("%s/flussonic/api/%s", *m.Flags.Backend, path),
-		nil,
-	)
-
-	req.SetBasicAuth(
-		m.Config.BasicAuth.Username,
-		m.Config.BasicAuth.Password,
-	)
-
-	log.Debugf("getting %s info", path)
-
-	resp, err := m.Config.Client.Do(req)
-	if err != nil {
-		return body, fmt.Errorf("get error: %s", err)
-	}
-	defer resp.Body.Close()
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return body, fmt.Errorf("response body reading error: %s", err)
-	}
-
-	return body, nil
 }
 
 var (
@@ -264,6 +260,7 @@ func init() {
 	meta.Flags.InsecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Skip verify cert for Flussonic media server.")
 	meta.Flags.Config = flag.String("config-path", "/etc/flussonic/flussonic.conf", "Flussonic media server config path.")
 	meta.Flags.Version = flag.Bool("version", false, "Show exporter version.")
+	meta.Flags.StreamsRequestLimit = flag.Uint64("streams-request-limit", 10000, "Set limit argument for /flussonic/api/v3/streams request")
 	flag.Parse()
 
 	if *meta.Flags.Version {
