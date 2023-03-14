@@ -45,31 +45,31 @@ type Flags struct {
 }
 
 type Metrics struct {
-	FlussonicStreams
-	FlussonicServer
+	StreamerApiV3
 }
 
-type FlussonicStreams struct {
-	Streams []FlussonicStream
+type StreamerApiV3 struct {
+	Streams []Stream
+	ConfigStats
 }
 
-type FlussonicStream struct {
+type Stream struct {
 	Name, Title string
-	Dvr         FlussonicStreamDvr
-	Stats       FlussonicStreamStats
+	Dvr         StreamDvr
+	Stats       StreamStats
 }
 
-type FlussonicStreamStats struct {
+type StreamStats struct {
 	AgentStatus string
 	Alive       bool
 	RetryCount  uint64
 }
 
-type FlussonicStreamDvr struct {
+type StreamDvr struct {
 	Expiration uint64
 }
 
-type FlussonicServer struct {
+type ConfigStats struct {
 	Uptime        uint64
 	TotalClients  uint64 `json:"total_clients"`
 	TotalStreams  uint16 `json:"total_streams"`
@@ -121,7 +121,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 	}
 
-	for _, value := range meta.Metrics.FlussonicStreams.Streams {
+	for _, value := range meta.Metrics.StreamerApiV3.Streams {
 		s := streamStatus.With(prometheus.Labels{
 			"name":           value.Name,
 			"title":          value.Title,
@@ -140,10 +140,10 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 	}
 
-	mediaServerUptime.Set(float64(meta.Metrics.FlussonicServer.Uptime))
-	mediaServerTotalClients.Set(float64(meta.Metrics.FlussonicServer.TotalClients))
-	mediaServerTotalStreams.Set(float64(meta.Metrics.FlussonicServer.TotalStreams))
-	mediaServerOnlineStreams.Set(float64(meta.Metrics.FlussonicServer.OnlineStreams))
+	mediaServerUptime.Set(float64(meta.Metrics.StreamerApiV3.ConfigStats.Uptime))
+	mediaServerTotalClients.Set(float64(meta.Metrics.StreamerApiV3.ConfigStats.TotalClients))
+	mediaServerTotalStreams.Set(float64(meta.Metrics.StreamerApiV3.ConfigStats.TotalStreams))
+	mediaServerOnlineStreams.Set(float64(meta.Metrics.StreamerApiV3.ConfigStats.OnlineStreams))
 
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
@@ -154,7 +154,7 @@ func (m *Meta) GetStreamsInfo() error {
 
 	req, _ := http.NewRequest(
 		http.MethodGet,
-		fmt.Sprintf("%s/flussonic/api/v3/streams", *m.Flags.Backend),
+		fmt.Sprintf("%s/streamer/api/v3/streams", *m.Flags.Backend),
 		nil,
 	)
 
@@ -167,7 +167,7 @@ func (m *Meta) GetStreamsInfo() error {
 	q.Add("limit", strconv.FormatUint(*m.Flags.StreamsRequestLimit, 10))
 	req.URL.RawQuery = q.Encode()
 
-	log.Debug("getting /flussonic/api/v3/streams info")
+	log.Debug("getting /streamer/api/v3/streams info")
 
 	resp, err := m.Config.Client.Do(req)
 	if err != nil {
@@ -180,9 +180,9 @@ func (m *Meta) GetStreamsInfo() error {
 		return fmt.Errorf("response body reading error: %s", err)
 	}
 
-	err = json.Unmarshal(body, &m.Metrics.FlussonicStreams)
+	err = json.Unmarshal(body, &m.Metrics.StreamerApiV3.Streams)
 	if err != nil {
-		return fmt.Errorf("flussonic/api/v3/streams: response body unmarshaling error: %s", err)
+		return fmt.Errorf("streamer/api/v3/streams: response body unmarshaling error: %s", err)
 	}
 
 	return nil
@@ -193,7 +193,7 @@ func (m *Meta) GetServerInfo() error {
 
 	req, _ := http.NewRequest(
 		http.MethodGet,
-		fmt.Sprintf("%s/flussonic/api/server", *m.Flags.Backend),
+		fmt.Sprintf("%s/streamer/api/v3/config/stats", *m.Flags.Backend),
 		nil,
 	)
 
@@ -202,7 +202,7 @@ func (m *Meta) GetServerInfo() error {
 		m.Config.BasicAuth.Password,
 	)
 
-	log.Debug("getting /flussonic/api/server info")
+	log.Debug("getting /streamer/api/v3/config/stats info")
 
 	resp, err := m.Config.Client.Do(req)
 	if err != nil {
@@ -215,9 +215,9 @@ func (m *Meta) GetServerInfo() error {
 		return fmt.Errorf("response body reading error: %s", err)
 	}
 
-	err = json.Unmarshal(body, &m.Metrics.FlussonicServer)
+	err = json.Unmarshal(body, &m.Metrics.StreamerApiV3.ConfigStats)
 	if err != nil {
-		return fmt.Errorf("api/server: response body unmarshaling error: %s", err)
+		return fmt.Errorf("streamer/api/v3/config/stats: response body unmarshaling error: %s", err)
 	}
 
 	return nil
