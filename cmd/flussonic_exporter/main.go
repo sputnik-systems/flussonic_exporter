@@ -49,8 +49,12 @@ type Metrics struct {
 }
 
 type StreamerApiV3 struct {
-	Streams []Stream
+	Streams
 	ConfigStats
+}
+
+type Streams struct {
+	Streams []Stream
 }
 
 type Stream struct {
@@ -121,7 +125,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 	}
 
-	for _, value := range meta.Metrics.StreamerApiV3.Streams {
+	for _, value := range meta.Metrics.StreamerApiV3.Streams.Streams {
 		s := streamStatus.With(prometheus.Labels{
 			"name":           value.Name,
 			"title":          value.Title,
