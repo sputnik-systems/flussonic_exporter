@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -175,7 +175,7 @@ func (m *Meta) GetStreamsInfo() error {
 	}
 	defer resp.Body.Close()
 
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("response body reading error: %s", err)
 	}
@@ -210,7 +210,7 @@ func (m *Meta) GetServerInfo() error {
 	}
 	defer resp.Body.Close()
 
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("response body reading error: %s", err)
 	}
