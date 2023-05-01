@@ -23,8 +23,8 @@ dockers:
   - goos: linux
     goarch: amd64
     image_templates:
-      - "sputnik-systems/flussonic-exporter:latest"
-      - "sputnik-systems/flussonic-exporter:{{ .Tag }}"
+      - "ghcr.io/sputnik-systems/{{ .ProjectName }}:latest"
+      - "ghcr.io/sputnik-systems/{{ .ProjectName }}:{{ .Tag }}"
 
 checksum:
   name_template: 'checksums.txt'
