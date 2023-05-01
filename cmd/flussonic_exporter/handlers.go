@@ -125,10 +125,10 @@ func probeHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		remoteStreamerOnlineStreams,
 	)
 
-	addr := r.URL.Query().Get("addr")
+	target := r.URL.Query().Get("target")
 	username := r.URL.Query().Get("username")
 	password := r.URL.Query().Get("password")
-	streamer, ok := targets[addr]
+	streamer, ok := targets[target]
 	if !ok {
 		opts := []sdk.ClientOption{
 			sdk.WithBasicAuth(username, password),
@@ -136,8 +136,8 @@ func probeHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		if *insecureSkipVerify {
 			opts = append(opts, sdk.WithInsecureSkipVerify())
 		}
-		streamer = sdk.NewStreamerClient(addr, opts...)
-		targets[addr] = streamer
+		streamer = sdk.NewStreamerClient(target, opts...)
+		targets[target] = streamer
 	}
 
 	// collect streamer metrics
