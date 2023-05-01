@@ -51,5 +51,6 @@ func init() {
 func main() {
 	http.HandleFunc("/metrics", metricsHandlerFunc)
 	http.HandleFunc("/probe", probeHandlerFunc)
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
 	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }
