@@ -27,6 +27,7 @@ func init() {
 	flussonicAddress = flag.String("streamer-api-address", "http://localhost:80", "Flussonic media server api address.")
 	flussonicConfigPath = flag.String("streamer-config-path", "/etc/flussonic/flussonic.conf", "Flussonic media server config path.")
 	insecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Skip verify cert for Flussonic media server.")
+	logLevel := flag.String("log-level", "info", "Exporter log level.")
 	getVersion := flag.Bool("version", false, "Show exporter version.")
 	flag.Parse()
 
@@ -40,7 +41,11 @@ func init() {
 		os.Exit(0)
 	}
 
-	log.SetLevel(log.DebugLevel)
+	lvl, err := log.ParseLevel(*logLevel)
+	if err != nil {
+		panic(err)
+	}
+	log.SetLevel(lvl)
 }
 
 func main() {
