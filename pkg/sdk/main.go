@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage"
 	v3 "github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage/v3"
@@ -93,6 +94,7 @@ func (c *Client) GetStreams(cursor string) (storage.Streams, error) {
 	req.SetBasicAuth(c.auth.user, c.auth.pass)
 
 	q := req.URL.Query()
+	q.Add("limit", strconv.Itoa(1000))
 	q.Add("cursor", cursor)
 	req.URL.RawQuery = q.Encode()
 
