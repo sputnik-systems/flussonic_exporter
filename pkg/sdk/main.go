@@ -4,11 +4,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage"
-	v3 "github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage/v3"
 	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage"
+	v3 "github.com/sputnik-systems/flussonic_exporter/pkg/sdk/storage/v3"
 )
 
 type Client struct {
